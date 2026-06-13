@@ -1,3 +1,6 @@
+import time
+from contextlib import contextmanager
+
 def parse(path):
     with open(path, "r") as f:
         lines_read = 0
@@ -28,3 +31,12 @@ class Paginator:
         if not page:
             raise StopIteration
         return page
+
+@contextmanager
+def timer():
+    start = time.perf_counter()
+    try:
+        yield
+    finally:
+        print(f"[timer] {time.perf_counter() - start:.4f} seconds")
+
