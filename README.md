@@ -15,6 +15,12 @@
      own README.md — the first heading becomes the title, the first line of text
      becomes the blurb. -->
 <!-- PROJECTS:START -->
+
+| Project | What it covers |
+| --- | --- |
+| [Log File Analyzer](./Log%20File%20Analyzer) | _add a README to this folder_ |
+| [datapipe](./datapipe) | _add a README to this folder_ |
+
 <!-- PROJECTS:END -->
 
 ## How this repo is organized
