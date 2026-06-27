@@ -20,6 +20,7 @@
 | --- | --- |
 | [Log File Analyzer](./Log%20File%20Analyzer) | _add a README to this folder_ |
 | [datapipe](./datapipe) | _add a README to this folder_ |
+| [practice](./practice) | _add a README to this folder_ |
 
 <!-- PROJECTS:END -->
 
