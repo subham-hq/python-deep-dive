@@ -1,0 +1,60 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "expense-tracker"
+version = "0.1.0"
+description = "A CLI expense tracker, engineered to a production standard."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Subham" }]
+dependencies = []                  # stdlib only — try hard to keep it that way
+
+[project.optional-dependencies]
+dev = [
+  "mypy>=1.11",
+  "pytest>=8.3",
+  "pytest-cov>=5.0",
+  "ruff>=0.6",
+  "pre-commit>=3.8",
+]
+
+[project.scripts]
+expense-tracker = "expense_tracker.main:main"    # installs a real CLI command
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/expense_tracker"]
+
+# ---------------- mypy ----------------
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src", "tests"]
+warn_unreachable = true
+
+# ---------------- ruff ----------------
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+  "E", "W",   # pycodestyle
+  "F",        # pyflakes
+  "I",        # isort (import ordering)
+  "N",        # pep8-naming
+  "UP",       # pyupgrade
+  "B",        # bugbear — catches real bugs, highest value here
+  "A",        # shadowing builtins
+  "C4",       # comprehensions
+  "SIM",      # simplifications
+  "PTH",      # prefer pathlib over os.path
+  "RUF",      # ruff-specific
+]
+
+# ---------------- pytest ----------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers --strict-config"
