@@ -1,7 +1,7 @@
 # Expense Tracker
 
 <!-- ─────────────────────────────────────────────────────────────────────
-     TODO (Subham — your voice, not mine):
+     Coming Soon:
        1. Replace the one-line description below.
        2. Write the "Why I built this" section.
        3. Add the CI badge once the repo is pushed:
