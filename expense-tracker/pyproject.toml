@@ -1,0 +1,118 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "expense-tracker"
+version = "1.0.0"
+description = "A typed, tested command-line expense tracker built on the Python standard library."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Subham" }]
+keywords = ["cli", "expenses", "finance", "budgeting"]
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Environment :: Console",
+  "Intended Audience :: End Users/Desktop",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Office/Business :: Financial",
+  "Typing :: Typed",
+]
+# Standard library only. Every dependency is a thing that can break, and
+# nothing here needs one.
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+  "mypy>=1.11",
+  "pytest>=8.3",
+  "pytest-cov>=5.0",
+  "ruff>=0.6",
+  "pre-commit>=3.8",
+]
+
+[project.scripts]
+expense-tracker = "expense_tracker.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/expense_tracker"]
+
+# ---------------------------------------------------------------- mypy ----
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src", "tests"]
+warn_unreachable = true
+warn_unused_ignores = true
+show_error_codes = true
+# Fail if a decorator silently erases a function's type.
+disallow_any_decorated = false
+pretty = true
+
+# ---------------------------------------------------------------- ruff ----
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+  "E", "W",   # pycodestyle
+  "F",        # pyflakes
+  "I",        # isort
+  "N",        # pep8-naming
+  "UP",       # pyupgrade
+  "B",        # bugbear -- catches real bugs
+  "A",        # builtin shadowing
+  "C4",       # comprehensions
+  "SIM",      # simplifications
+  "PTH",      # prefer pathlib
+  "RET",      # return statements
+  "ARG",      # unused arguments
+  "PT",       # pytest style
+  "RUF",      # ruff-specific
+]
+ignore = [
+  # `date` and `id` read naturally as field names on an expense; the
+  # shadowing is scoped to the property and never reaches module level.
+  "A003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests intentionally pass bad types to assert they are rejected, and
+# fixture arguments are "unused" by design.
+"tests/*" = ["ARG001", "ARG002"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["expense_tracker"]
+
+# -------------------------------------------------------------- pytest ----
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = [
+  "-q",
+  "--strict-markers",
+  "--strict-config",
+  "--cov=expense_tracker",
+  "--cov-report=term-missing",
+  "--cov-fail-under=90",
+]
+
+# ------------------------------------------------------------ coverage ----
+[tool.coverage.run]
+branch = true
+source = ["src/expense_tracker"]
+
+[tool.coverage.report]
+exclude_lines = [
+  "pragma: no cover",
+  "if TYPE_CHECKING:",
+  "raise NotImplementedError",
+  "\\.\\.\\.",
+  "if __name__ == .__main__.:",
+]
