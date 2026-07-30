@@ -18,8 +18,10 @@
 
 | Project | What it covers |
 | --- | --- |
-| [Log File Analyzer](./Log%20File%20Analyzer) | _add a README to this folder_ |
+| [Log File Analyzer](./Log%20File%20Analyzer) | A memory-constant log analysis pipeline built on Python generators. |
 | [datapipe](./datapipe) | _add a README to this folder_ |
+| [Expense Tracker](./expense-tracker) | TODO (Subham — your voice, not mine): |
+| [notifier](./notifier) | _add a README to this folder_ |
 | [practice](./practice) | _add a README to this folder_ |
 
 <!-- PROJECTS:END -->
