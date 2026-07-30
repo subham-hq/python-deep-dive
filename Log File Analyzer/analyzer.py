@@ -6,8 +6,7 @@ from decorators import time_it
 # Module-level read counter. parse() increments it as a side effect so the
 # pipeline can report how many lines were touched without threading a count
 # through every generator. A mutable global is a deliberate shortcut here for
-# the lazy-proof demo — in production you'd track this inside a class or wrap
-# the file object instead.
+# the lazy-proof demo.
 LINES_READ = 0
 
 def parse(path):
