@@ -1,0 +1,5 @@
+# Development tools only. The scripts themselves need nothing beyond the
+# standard library.
+mypy>=1.11
+pytest>=8.0
+ruff>=0.6

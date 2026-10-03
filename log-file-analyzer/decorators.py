@@ -1,8 +1,13 @@
 import time
+from collections.abc import Callable
 from functools import wraps
+from typing import ParamSpec, TypeVar
+
+P = ParamSpec("P")
+R = TypeVar("R")
 
 
-def time_it(func):
+def time_it(func: Callable[P, R]) -> Callable[P, R]:
     """Decorator that prints how long the wrapped function took to run.
 
     Uses perf_counter (monotonic, high-resolution) rather than time.time,
@@ -10,7 +15,7 @@ def time_it(func):
     and __doc__ instead of reporting as 'wrapper'.
     """
     @wraps(func)
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
         start = time.perf_counter()
         result = func(*args, **kwargs)        # nothing between start/end but the call
         end = time.perf_counter()
@@ -19,17 +24,25 @@ def time_it(func):
     return wrapper
 
 
-def retry(times, delay):
+def retry(times: int, delay: float) -> Callable[[Callable[P, R]], Callable[P, R]]:
     """Decorator factory: re-runs the wrapped function on failure.
 
     Parameterized (takes times/delay), so it's three levels deep:
     retry() returns decorator, decorator returns wrapper, wrapper does the work.
     On the final attempt it re-raises rather than swallowing the error —
     a retry that hides failures is worse than no retry at all.
+
+    Bad arguments fail at decoration time: with times < 1 the loop would never
+    run and the wrapper would silently return None without calling func.
     """
-    def decorator(func):
+    if times < 1:
+        raise ValueError(f"times must be at least 1, got {times}")
+    if delay < 0:
+        raise ValueError(f"delay must be non-negative, got {delay}")
+
+    def decorator(func: Callable[P, R]) -> Callable[P, R]:
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             for i in range(1, times + 1):
                 try:
                     print(f"{func.__name__} - ({i})")
@@ -41,6 +54,10 @@ def retry(times, delay):
                         raise                  # last attempt: re-raise with full traceback
                     print(f"Retrying in {delay} seconds...")
                     time.sleep(delay)          # wait only BETWEEN attempts, never after the last
+            # Not reachable: every iteration either returns or, on the last one,
+            # re-raises. Spelled out so the type checker can see wrapper never
+            # falls off the end and returns None.
+            raise AssertionError("unreachable")
         return wrapper
     return decorator
 
@@ -52,7 +69,7 @@ if __name__ == "__main__":
 
     # --- time_it demo ---
     @time_it
-    def slow_task():
+    def slow_task() -> str:
         """Pretends to do expensive work."""
         time.sleep(1)
         return "done"
@@ -61,7 +78,7 @@ if __name__ == "__main__":
 
     # --- retry demo ---
     @retry(times=3, delay=1)
-    def flaky():
+    def flaky() -> int:
         """Simulates an unreliable API call."""
         if random.random() < 0.7:
             raise ValueError("simulated failure")

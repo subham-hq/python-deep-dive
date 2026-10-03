@@ -1,0 +1,41 @@
+# Tool configuration only. The project is a set of standalone scripts run with
+# `python analyzer.py`, not an installable package, so there is no [project]
+# table. Dev tools are listed in requirements-dev.txt.
+
+# -------------------------------------------------------------- pytest ----
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+# The scripts import each other as top-level modules (`from decorators import
+# time_it`), so the tests need this folder on sys.path to do the same.
+pythonpath = ["."]
+addopts = ["--strict-markers", "--strict-config"]
+xfail_strict = true
+
+# ---------------------------------------------------------------- ruff ----
+[tool.ruff]
+# 100 rather than 88 so the aligned end-of-line comments in the source fit.
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+  "E", "W",   # pycodestyle
+  "F",        # pyflakes
+  "I",        # isort
+  "N",        # pep8-naming
+  "UP",       # pyupgrade
+  "B",        # bugbear
+  "C4",       # comprehensions
+  "SIM",      # simplifications
+  "PT",       # pytest style
+  "RUF",      # ruff-specific
+]
+
+# ---------------------------------------------------------------- mypy ----
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["analyzer.py", "decorators.py", "make_logs.py", "tests"]
+warn_unreachable = true
+pretty = true
