@@ -1,0 +1,44 @@
+# Tool configuration only. Everything here is a standalone script run with
+# `python <file>.py`, not an installable package, so there is no [project] table.
+# Third-party packages (needed only by async-lab/fetch-benchmark/) are listed in
+# requirements.txt; dev tools in requirements-dev.txt.
+
+# -------------------------------------------------------------- pytest ----
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+# The scripts are not a package; put their folders on sys.path so the tests can
+# import them as top-level modules.
+pythonpath = ["oop", "async-lab", "async-lab/fetch-benchmark"]
+addopts = ["--strict-markers", "--strict-config"]
+xfail_strict = true
+
+# ---------------------------------------------------------------- ruff ----
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+# Lets the import sorter recognise the scripts imported by the tests as first-party.
+src = ["oop", "async-lab", "async-lab/fetch-benchmark", "tests"]
+
+[tool.ruff.lint]
+select = [
+  "E", "W",   # pycodestyle
+  "F",        # pyflakes
+  "I",        # isort
+  "N",        # pep8-naming
+  "UP",       # pyupgrade
+  "B",        # bugbear
+  "C4",       # comprehensions
+  "SIM",      # simplifications
+  "PT",       # pytest style
+  "RUF",      # ruff-specific
+]
+
+# ---------------------------------------------------------------- mypy ----
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["async-lab", "oop", "tests"]
+mypy_path = ["oop", "async-lab", "async-lab/fetch-benchmark"]
+warn_unreachable = true
+pretty = true

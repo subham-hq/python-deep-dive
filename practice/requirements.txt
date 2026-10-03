@@ -1,0 +1,3 @@
+# Only async-lab/fetch-benchmark/ needs these. Everything else is standard library.
+aiohttp>=3.9   # server.py and bench_fetch_asyncio.py
+httpx>=0.27    # bench_fetch_httpx.py

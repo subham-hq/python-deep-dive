@@ -1,5 +1,3 @@
-
-
 """
 ===============================================================================
 PYTHON CONCURRENCY NOTES: GIL, ASYNCIO, THREADS, PROCESSES & EXECUTORS
@@ -11,7 +9,11 @@ PYTHON CONCURRENCY NOTES: GIL, ASYNCIO, THREADS, PROCESSES & EXECUTORS
 - The GIL allows only ONE thread to execute Python bytecode at a time.
 - Therefore, multiple Python threads DO NOT execute CPU-bound Python code in
   parallel, even on a multi-core CPU.
-- The GIL exists to simplify memory management and keep Python objects thread-safe.
+- The GIL exists to simplify memory management: it protects CPython's own
+  internal state (such as reference counts). It does NOT make your code
+  thread-safe; shared data still needs a lock.
+- Python 3.13 also ships an optional free-threaded build (PEP 703) with the GIL
+  disabled. Everything below describes the default build.
 
 Example:
     Thread A -> Running Python code
@@ -286,30 +288,33 @@ ProcessPoolExecutor
     = Bypasses the GIL using multiple Python processes
 ===============================================================================
 """
-import concurrent
+
+import asyncio
 import inspect
 import time
-import asyncio
-from concurrent.futures import ProcessPoolExecutor
-from functools import wraps
 from collections.abc import Callable
-from typing import ParamSpec, TypeVar
-
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from functools import wraps
+from typing import Any, ParamSpec, TypeVar, cast
 
 P = ParamSpec("P")
 R = TypeVar("R")
 
+
 def time_it(func: Callable[P, R]) -> Callable[P, R]:
     if inspect.iscoroutinefunction(func):
+
         @wraps(func)
-        async def async_wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        async def async_wrapper(*args: P.args, **kwargs: P.kwargs) -> Any:
             start = time.perf_counter()
             result = await func(*args, **kwargs)
             end = time.perf_counter()
             print(f"{func.__name__} took {end - start:.4f} second(s)")
             return result
 
-        return async_wrapper
+        # Calling async_wrapper returns a coroutine, exactly like calling func, but a
+        # type checker cannot follow that through the iscoroutinefunction() branch.
+        return cast(Callable[P, R], async_wrapper)
 
     @wraps(func)
     def sync_wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
@@ -321,13 +326,14 @@ def time_it(func: Callable[P, R]) -> Callable[P, R]:
 
     return sync_wrapper
 
+
 def count_primes(limit: int) -> int:
     count = 0
 
     for n in range(2, limit + 1):
         is_prime = True
 
-        for i in range(2, int(n ** 0.5) + 1):
+        for i in range(2, int(n**0.5) + 1):
             if n % i == 0:
                 is_prime = False
                 break
@@ -337,57 +343,65 @@ def count_primes(limit: int) -> int:
 
     return count
 
+
+# The same CPU-bound job (count the primes below 100,000, seven times) run four ways.
+
+
 @time_it
-async def main():
+def no_concurrency() -> list[int]:
+    results = []
+    for _ in range(7):
+        results.append(count_primes(100000))
 
-    # No concurrency
-    # results = []
-    # for _ in range(7):
-    #     results.append(count_primes(100000))
-    #
-    # print(results)
-    #
-    # # main took 0.3060 second(s)
+    return results
 
 
-    # Run inside coroutines
-    # coroutines = [asyncio.to_thread(count_primes, 100000) for _ in range(7)]
-    # results = await asyncio.gather(*coroutines)
-    # print(results)
+@time_it
+async def with_to_thread() -> list[int]:
+    # Run inside coroutines.
+    # No real speed-up: the GIL lets only one thread execute Python bytecode at a time.
+    coroutines = [asyncio.to_thread(count_primes, 100000) for _ in range(7)]
+    results = await asyncio.gather(*coroutines)
+    return results
 
-    # main took 0.3143 second(s)
 
-    # With ThreadPoolExecutors
-
+@time_it
+def with_thread_pool() -> list[int]:
+    # Same story as to_thread() (which uses a thread pool under the hood): no faster
+    # than no_concurrency(), often slightly slower as the threads contend for the GIL.
     threads = []
-    with concurrent.futures.ThreadPoolExecutor() as executor:
+    with ThreadPoolExecutor() as executor:
         for _ in range(7):
             threads.append(executor.submit(count_primes, 100000))
 
         result = [thread.result() for thread in threads]
 
-    print(result)
+    return result
 
-    # main took 0.2766 second(s)
-    # Slight edge over sync code
 
-    # With ProcessPoolExecutors
-    # loop = asyncio.get_running_loop()
-    #
-    # processes = []
-    # with ProcessPoolExecutor() as executor:
-    #     for _ in range(7):
-    #         processes.append(loop.run_in_executor(executor, count_primes, 100000))
-    #
-    #     result = await asyncio.gather(*processes)
-    #
-    # print(result)
+@time_it
+async def with_process_pool() -> list[int]:
+    # Significantly faster: every worker process has its own interpreter and GIL,
+    # so the jobs really run in parallel (up to the number of CPU cores).
+    loop = asyncio.get_running_loop()
 
-    # main took 0.1769 second(s)
-    # Significantly faster
+    processes = []
+    with ProcessPoolExecutor() as executor:
+        for _ in range(7):
+            processes.append(loop.run_in_executor(executor, count_primes, 100000))
 
-if __name__ == '__main__':
+        result = await asyncio.gather(*processes)
+
+    return result
+
+
+@time_it
+async def main() -> None:
+    print(no_concurrency())
+    print(await with_to_thread())
+    print(with_thread_pool())
+    print(await with_process_pool())
+
+
+if __name__ == "__main__":
     asyncio.run(main())
-
-# if __name__ == '__main__':
-#     main()

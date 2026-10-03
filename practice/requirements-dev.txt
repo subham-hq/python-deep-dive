@@ -1,0 +1,6 @@
+-r requirements.txt
+mypy>=1.11
+pytest>=8.0
+# ruff's formatter output changes between minor releases; this range is the one
+# `ruff format --check` was verified against.
+ruff>=0.15,<0.17

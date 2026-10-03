@@ -1,28 +1,30 @@
+import asyncio
 import inspect
 import time
-import asyncio
 from asyncio import CancelledError
-from functools import wraps
-from datetime import datetime
 from collections.abc import Callable
-from http.client import responses
-from typing import ParamSpec, TypeVar
-
+from datetime import datetime
+from functools import wraps
+from typing import Any, ParamSpec, TypeVar, cast
 
 P = ParamSpec("P")
 R = TypeVar("R")
 
+
 def time_it(func: Callable[P, R]) -> Callable[P, R]:
     if inspect.iscoroutinefunction(func):
+
         @wraps(func)
-        async def async_wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        async def async_wrapper(*args: P.args, **kwargs: P.kwargs) -> Any:
             start = time.perf_counter()
             result = await func(*args, **kwargs)
             end = time.perf_counter()
             print(f"{func.__name__} took {end - start:.4f} second(s)")
             return result
 
-        return async_wrapper
+        # Calling async_wrapper returns a coroutine, exactly like calling func, but a
+        # type checker cannot follow that through the iscoroutinefunction() branch.
+        return cast(Callable[P, R], async_wrapper)
 
     @wraps(func)
     def sync_wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
@@ -34,27 +36,31 @@ def time_it(func: Callable[P, R]) -> Callable[P, R]:
 
     return sync_wrapper
 
-async def operation(param: int) -> None | str:
+
+async def operation(param: int) -> str | None:
 
     try:
         async with asyncio.timeout(5):
             while True:
                 try:
-                    print(f"Job-{param} started at {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}")
+                    print(f"Job-{param} started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
                     await asyncio.sleep(param)
-                    print(f"Worker finished")
+                    print("Worker finished")
                     return f"Job result: {param}"
-                except TimeoutError as e: # If this catch as cancelled error it will not raise a timeout error
-                    # it will not be able to detect timeout error here as asyncio.timeout
-                    # injects a cancellation and so it is not timeout error,
-                    # it is declared as timeout error when the context manager exits.
+                except TimeoutError as e:
+                    # Never reached: asyncio.timeout() injects a *cancellation* into the
+                    # task, so what arrives here is CancelledError, not TimeoutError. It
+                    # only becomes TimeoutError when the context manager exits. (If this
+                    # caught CancelledError instead, no TimeoutError would be raised.)
                     print(f"Canceled due to {type(e).__name__}")
-                    break # without this the task becomes unkillable
-    except TimeoutError as e: # try commenting out this block and you will see the difference better.
+                    break
+    except TimeoutError as e:  # try commenting out this block to see the difference
         print(f"Canceled due to {type(e).__name__}")
     finally:
-            print(f"Cleaning up...")
-            print(f"Job-{param} canceled")
+        print("Cleaning up...")
+        print(f"Job-{param} canceled")
+    return None
+
 
 @time_it
 async def main() -> None:
@@ -64,19 +70,28 @@ async def main() -> None:
 
     await task
 
-    async with asyncio.timeout(5):
-        # if we do both timeout and wait_for @ 3 s timeout fires first,
-        # if we change the time obviously the one with less time kicks in first
-        try:
+    # The try must wrap the `async with`, not sit inside it: asyncio.timeout() raises
+    # its TimeoutError when the block exits, which is outside any try placed within it.
+    try:
+        async with asyncio.timeout(5):
+            # if we do both timeout and wait_for @ 3 s timeout fires first,
+            # if we change the time obviously the one with less time kicks in first
             try:
                 response = await asyncio.wait_for(operation(10), 3)
                 print(response)
             except CancelledError as e:
+                # Reached when the outer timeout fires first. Catching it here swallows
+                # the cancellation, so the outer timeout never turns it into TimeoutError.
                 print(f"Canceled due to {type(e).__name__}")
-            except TimeoutError as e: # It directly raises timeout error as it is not inside any context manager.
+            except TimeoutError as e:
+                # wait_for() fired first: it cancels operation() and raises TimeoutError
+                # itself, so this is a plain exception from the awaited call.
                 print(f"Canceled due to wait_for: {type(e).__name__}")
-        except TimeoutError as e:
-            print(f"Canceled due to timeout: {type(e).__name__}")
+    except TimeoutError as e:
+        # Reached when the outer timeout fires first and nothing above swallowed the
+        # CancelledError (set the outer timeout below 3 s and remove that branch to see it).
+        print(f"Canceled due to timeout: {type(e).__name__}")
+
 
 if __name__ == "__main__":
     asyncio.run(main())
