@@ -18,7 +18,7 @@
 
 | Project | What it covers |
 | --- | --- |
-| [datapipe](./datapipe) | _add a README to this folder_ |
+| [datapipe](./datapipe) | A tiny, fully typed data pipeline that validates, normalizes and scales JSON records through composable steps, using only the standard library. |
 | [Expense Tracker](./expense-tracker) | Coming Soon: |
 | [Log File Analyzer](./log-file-analyzer) | A memory-constant log analysis pipeline built on Python generators. |
 | [notifier](./notifier) | _add a README to this folder_ |
