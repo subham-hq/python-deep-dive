@@ -19,7 +19,7 @@
 | Project | What it covers |
 | --- | --- |
 | [datapipe](./datapipe) | A tiny, fully typed data pipeline that validates, normalizes and scales JSON records through composable steps, using only the standard library. |
-| [Expense Tracker](./expense-tracker) | Coming Soon: |
+| [Expense Tracker](./expense-tracker) | A typed, tested command-line expense tracker built on the Python standard library, with exact decimal money and atomic saves. |
 | [Log File Analyzer](./log-file-analyzer) | A memory-constant log analysis pipeline built on Python generators. |
 | [notifier](./notifier) | _add a README to this folder_ |
 | [practice](./practice) | _add a README to this folder_ |
