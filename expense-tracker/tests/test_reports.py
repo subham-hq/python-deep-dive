@@ -91,6 +91,15 @@ class TestSummaryReport:
         expenses = [make_expense(amount="10.00"), make_expense(amount="21.00")]
         assert "15.50" in SummaryReport().render(expenses)
 
+    def test_average_rounds_half_up_like_every_other_amount(self) -> None:
+        """Regression: the mean was quantised with the context's default
+        banker's rounding, so 0.05 / 2 = 0.025 printed as 0.02.
+        """
+        expenses = [make_expense(amount="0.01"), make_expense(amount="0.04")]
+        rendered = SummaryReport().render(expenses)
+        assert "₹0.03" in rendered
+        assert "₹0.02" not in rendered
+
 
 class TestCategoryBreakdownReport:
     def test_lists_every_category(self, expenses: list[Expense]) -> None:
@@ -123,6 +132,16 @@ class TestMonthlyReport:
         rendered = MonthlyReport().render(expenses)
         jan, feb, mar = (rendered.index(m) for m in ("2026-01", "2026-02", "2026-03"))
         assert jan < feb < mar
+
+    def test_columns_line_up_with_the_header(self, expenses: list[Expense]) -> None:
+        """Regression: month rows were two characters narrower than the
+        header and TOTAL rows, so the Count and Total columns drifted left.
+        """
+        lines = MonthlyReport().render(expenses).splitlines()
+        header_index = next(i for i, line in enumerate(lines) if "Count" in line)
+        table = [line for line in lines[header_index:] if not line.startswith("-")]
+        assert len(table) == 5  # header, three months, TOTAL
+        assert {len(line) for line in table} == {len(lines[header_index])}
 
 
 class TestRegistry:

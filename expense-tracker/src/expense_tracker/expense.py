@@ -6,7 +6,8 @@ Design notes
   floating point, and that error compounds across a ledger. Amounts are
   normalised to exactly two decimal places using `ROUND_HALF_UP`, which is
   what people expect from currency rounding (Python's default is banker's
-  rounding, which rounds 2.5 to 2).
+  rounding, which rounds 2.5 to 2). Amounts must be below `MAX_AMOUNT` so
+  that totals stay inside the range where `Decimal` arithmetic is exact.
 
 * **`float` is rejected outright.** Accepting it would silently reintroduce
   the precision problem the `Decimal` choice exists to avoid. Pass a
@@ -14,8 +15,8 @@ Design notes
 
 * **Dates are `datetime.date` objects in memory, ISO strings on disk.**
   Storing them as strings would make sorting and month filtering into string
-  manipulation. The JSON representation is unchanged, so existing data files
-  load without migration.
+  manipulation. The JSON representation of a date is unchanged, so stored
+  dates need no migration.
 
 * **Validation lives in property setters,** so an `Expense` cannot exist in
   an invalid state -- not after construction, and not after later mutation.
@@ -36,6 +37,12 @@ from expense_tracker.exceptions import (
 
 #: Every amount is quantised to this many decimal places.
 CENTS = Decimal("0.01")
+
+#: Amounts must be smaller than this. Decimal arithmetic is exact only while
+#: results fit in the context's 28 significant digits; keeping each amount
+#: below 10**15 leaves room for any realistic total to stay exact. Without a
+#: bound, "1e30" makes `quantize` raise `InvalidOperation`.
+MAX_AMOUNT = Decimal(10**15)
 
 #: Types accepted where a money value is expected. `float` is deliberately
 #: absent -- see the module docstring.
@@ -66,6 +73,8 @@ def to_money(value: MoneyLike) -> Decimal:
     Raises:
         InvalidAmountTypeError: if `value` is not a supported type, or is a
             string that does not parse as a number.
+        InvalidAmountValueError: if `value`, once rounded to two places, is
+            not smaller than `MAX_AMOUNT` in magnitude.
     """
     # bool is a subclass of int, so `isinstance(True, int)` is True. Catch it
     # explicitly -- True would otherwise become an amount of 1.00.
@@ -82,15 +91,38 @@ def to_money(value: MoneyLike) -> Decimal:
         # not usable as money.
         raise InvalidAmountTypeError(value)
 
-    return amount.quantize(CENTS, rounding=ROUND_HALF_UP)
+    too_large = f"Amount must be less than {MAX_AMOUNT:,}."
+
+    if amount.copy_abs() >= MAX_AMOUNT:
+        # Checked before quantize(), which raises InvalidOperation once the
+        # result needs more digits than the decimal context provides.
+        raise InvalidAmountValueError(value, too_large)
+
+    rounded = amount.quantize(CENTS, rounding=ROUND_HALF_UP)
+
+    if rounded.copy_abs() >= MAX_AMOUNT:
+        # And checked again after it: 999999999999999.995 is below the limit
+        # but rounds up to it. Accepting that value would save a record that
+        # the next load rejects, leaving the file unusable from the CLI.
+        raise InvalidAmountValueError(value, too_large)
+
+    return rounded
 
 
 def to_date(value: DateLike) -> dt.date:
     """Normalise `value` to a `datetime.date`.
 
+    A `datetime` is accepted and reduced to its date.
+
     Raises:
         InvalidDateError: if `value` is not a date or a valid ISO date string.
     """
+    if isinstance(value, dt.datetime):
+        # datetime subclasses date, so it would pass the check below as-is.
+        # Kept whole, it would be saved as "2026-01-05T09:30:00", which the
+        # next load rejects, and comparing it with a date raises TypeError.
+        return value.date()
+
     if isinstance(value, dt.date):
         return value
 

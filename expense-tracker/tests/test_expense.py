@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 import pytest
@@ -13,7 +13,7 @@ from expense_tracker.exceptions import (
     InvalidDateError,
     InvalidTextFieldError,
 )
-from expense_tracker.expense import Expense, to_date, to_money
+from expense_tracker.expense import MAX_AMOUNT, Expense, to_date, to_money
 
 from .conftest import make_expense
 
@@ -60,6 +60,46 @@ class TestToMoney:
         with pytest.raises(InvalidAmountTypeError):
             to_money(value)
 
+    @pytest.mark.parametrize(
+        "value",
+        ["1e30", "-1e30", 10**30, "1e15", "1000000000000000", MAX_AMOUNT],
+    )
+    def test_rejects_amounts_too_large_to_stay_exact(
+        self, value: str | int | Decimal
+    ) -> None:
+        """Regression: "1e30" used to escape as a raw decimal.InvalidOperation
+        from quantize(), which the CLI printed as a traceback.
+        """
+        with pytest.raises(InvalidAmountValueError) as exc_info:
+            to_money(value)
+        assert "less than" in str(exc_info.value)
+
+    @pytest.mark.parametrize(
+        "value",
+        ["999999999999999.99", "999999999999999.994", "999999999999999.9949"],
+    )
+    def test_accepts_the_largest_amount_below_the_limit(self, value: str) -> None:
+        assert to_money(value) == MAX_AMOUNT - Decimal("0.01")
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "999999999999999.995",
+            "-999999999999999.995",
+            Decimal("999999999999999.999"),
+        ],
+    )
+    def test_rejects_amounts_that_round_up_to_the_limit(
+        self, value: str | Decimal
+    ) -> None:
+        """Regression: the limit used to be checked before rounding, so
+        999999999999999.995 was accepted and stored as 1000000000000000.00,
+        a value the next load then rejected.
+        """
+        with pytest.raises(InvalidAmountValueError) as exc_info:
+            to_money(value)
+        assert "less than" in str(exc_info.value)
+
 
 class TestToDate:
     @pytest.mark.parametrize(
@@ -72,6 +112,15 @@ class TestToDate:
     )
     def test_accepts_valid_dates(self, value: str | date, expected: date) -> None:
         assert to_date(value) == expected
+
+    def test_datetime_is_reduced_to_its_date(self) -> None:
+        """Regression: a datetime (a date subclass) used to be kept whole,
+        saved as an ISO timestamp the next load rejected, and made date
+        comparisons raise TypeError.
+        """
+        result = to_date(datetime(2026, 1, 5, 9, 30))
+        assert type(result) is date
+        assert result == date(2026, 1, 5)
 
     @pytest.mark.parametrize(
         "value",
@@ -111,8 +160,14 @@ class TestExpenseValidation:
 
     @pytest.mark.parametrize("amount", ["0", "0.00", "-1", "-0.01", Decimal("-500")])
     def test_rejects_non_positive_amount(self, amount: str | Decimal) -> None:
-        with pytest.raises(InvalidAmountValueError):
+        with pytest.raises(InvalidAmountValueError) as exc_info:
             make_expense(amount=amount)  # type: ignore[arg-type]
+        assert "greater than zero" in str(exc_info.value)
+
+    def test_rejects_an_amount_that_rounds_to_zero(self) -> None:
+        """0.004 is positive, but it is 0.00 once quantised to cents."""
+        with pytest.raises(InvalidAmountValueError):
+            make_expense(amount="0.004")
 
     @pytest.mark.parametrize("blank", ["", "   ", "\t\n"])
     def test_rejects_blank_title(self, blank: str) -> None:

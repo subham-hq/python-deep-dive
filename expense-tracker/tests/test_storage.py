@@ -7,6 +7,7 @@ reproduces a bug that existed in an earlier version of this code.
 from __future__ import annotations
 
 import json
+from datetime import date, datetime
 from pathlib import Path
 from unittest import mock
 
@@ -81,6 +82,62 @@ class TestLoad:
             JSONStorage(data_file).load()
         assert "position 2" in str(exc_info.value)
 
+    def test_non_utf8_file_raises_load_error(self, data_file: Path) -> None:
+        """Regression: a UnicodeDecodeError used to escape unwrapped, so the
+        message never said which file was the problem.
+        """
+        data_file.write_bytes(b"\xff\xfe[]")
+        with pytest.raises(LoadError) as exc_info:
+            JSONStorage(data_file).load()
+        assert str(data_file) in str(exc_info.value)
+        assert isinstance(exc_info.value.__cause__, UnicodeDecodeError)
+
+    def test_records_without_ids_are_loaded(self, data_file: Path) -> None:
+        """`null` is a legal stored ID; the tracker assigns one on load."""
+        record = make_expense().to_dict()
+        assert record["txn_id"] is None
+        data_file.write_text(json.dumps([record]), encoding="utf-8")
+        assert [e.txn_id for e in JSONStorage(data_file).load()] == [None]
+
+
+class TestTxnIdValidation:
+    """Regression: `txn_id` was the one field nothing validated. A string ID
+    loaded fine and then crashed the tracker inside `max()` with a TypeError.
+    """
+
+    @pytest.mark.parametrize("bad_id", ["7", 7.0, True, [7]])
+    def test_non_integer_id_is_a_corrupt_record(
+        self, data_file: Path, bad_id: object
+    ) -> None:
+        record = make_expense().to_dict() | {"txn_id": bad_id}
+        data_file.write_text(json.dumps([record]), encoding="utf-8")
+        with pytest.raises(CorruptRecordError) as exc_info:
+            JSONStorage(data_file).load()
+        assert "txn_id" in str(exc_info.value)
+
+    def test_duplicate_id_names_both_positions(self, data_file: Path) -> None:
+        """Two records sharing an ID would make `remove` delete whichever came
+        first and leave the other one still answering to that ID.
+        """
+        records = [
+            make_expense("Chai").to_dict() | {"txn_id": 1},
+            make_expense("Tea").to_dict() | {"txn_id": 2},
+            make_expense("Coffee").to_dict() | {"txn_id": 1},
+        ]
+        data_file.write_text(json.dumps(records), encoding="utf-8")
+        with pytest.raises(CorruptRecordError) as exc_info:
+            JSONStorage(data_file).load()
+        message = str(exc_info.value)
+        assert "position 2" in message
+        assert "position 0" in message
+
+    def test_several_records_without_ids_are_not_duplicates(
+        self, data_file: Path
+    ) -> None:
+        records = [make_expense().to_dict(), make_expense().to_dict()]
+        data_file.write_text(json.dumps(records), encoding="utf-8")
+        assert len(JSONStorage(data_file).load()) == 2
+
 
 class TestLoadErrorPropagation:
     """Regression: a bare `except:` used to replace every load failure with a
@@ -98,6 +155,19 @@ class TestLoadErrorPropagation:
         # The message names the offending value, not just the filename.
         assert "2026-13-45" in str(exc_info.value)
 
+    def test_validation_error_notes_which_record_failed(self, data_file: Path) -> None:
+        """The exception type is unchanged; a note says where it came from."""
+        good = make_expense().to_dict() | {"txn_id": 1}
+        bad = make_expense().to_dict() | {"txn_id": 2, "date": "2026-13-45"}
+        data_file.write_text(json.dumps([good, bad]), encoding="utf-8")
+
+        with pytest.raises(InvalidDateError) as exc_info:
+            JSONStorage(data_file).load()
+        notes = exc_info.value.__notes__
+        assert len(notes) == 1
+        assert "position 1" in notes[0]
+        assert str(data_file) in notes[0]
+
     def test_invalid_amount_surfaces_as_invalid_amount_error(
         self, data_file: Path
     ) -> None:
@@ -107,6 +177,18 @@ class TestLoadErrorPropagation:
 
         with pytest.raises(InvalidAmountValueError):
             JSONStorage(data_file).load()
+
+    def test_amount_at_the_limit_is_rejected_on_load(self, data_file: Path) -> None:
+        """The amount limit applies to stored records as well as new input,
+        and the error says which record to fix.
+        """
+        record = make_expense().to_dict() | {"amount": "1000000000000000.00"}
+        data_file.write_text(json.dumps([record]), encoding="utf-8")
+
+        with pytest.raises(InvalidAmountValueError) as exc_info:
+            JSONStorage(data_file).load()
+        assert "less than" in str(exc_info.value)
+        assert "position 0" in exc_info.value.__notes__[0]
 
     def test_wrapped_errors_keep_their_cause(self, data_file: Path) -> None:
         """`raise ... from e` means the traceback still shows the real cause."""
@@ -139,6 +221,24 @@ class TestSave:
         storage = JSONStorage(data_file)
         storage.save(original)
         assert storage.load() == original
+
+    @pytest.mark.parametrize("amount", ["999999999999999.99", "999999999999999.994"])
+    def test_round_trips_the_largest_allowed_amount(
+        self, data_file: Path, amount: str
+    ) -> None:
+        """Whatever validation lets in, a later load must accept again."""
+        storage = JSONStorage(data_file)
+        storage.save([make_expense(amount=amount)])
+        [loaded] = storage.load()
+        assert str(loaded.amount) == "999999999999999.99"
+
+    def test_round_trips_an_expense_dated_with_a_datetime(
+        self, data_file: Path
+    ) -> None:
+        storage = JSONStorage(data_file)
+        storage.save([Expense("Chai", "Food", "20", datetime(2026, 1, 5, 9, 30))])
+        [loaded] = storage.load()
+        assert loaded.date == date(2026, 1, 5)
 
     def test_save_replaces_rather_than_appends(self, data_file: Path) -> None:
         """Regression: an earlier version appended on every save."""
@@ -202,6 +302,36 @@ class TestSaveIsAtomic:
         ):
             storage.save([make_expense()])
         assert isinstance(exc_info.value.__cause__, OSError)
+
+
+class TestSaveSetupFailures:
+    """Regression: creating the directory and the temp file happened outside
+    the `try`, so failures there escaped as raw OSErrors -- a traceback at
+    the CLI instead of a SaveError.
+    """
+
+    def test_parent_that_is_a_file_raises_save_error(self, tmp_path: Path) -> None:
+        blocker = tmp_path / "not-a-directory"
+        blocker.write_text("", encoding="utf-8")
+        with pytest.raises(SaveError) as exc_info:
+            JSONStorage(blocker / "expenses.json").save([make_expense()])
+        assert isinstance(exc_info.value.__cause__, OSError)
+
+    def test_temp_file_failure_raises_save_error_and_keeps_original(
+        self, data_file: Path
+    ) -> None:
+        storage = JSONStorage(data_file)
+        storage.save([make_expense()])
+        before = data_file.read_text(encoding="utf-8")
+
+        with (
+            mock.patch("tempfile.mkstemp", side_effect=PermissionError("read-only")),
+            pytest.raises(SaveError) as exc_info,
+        ):
+            storage.save([make_expense("Other")])
+
+        assert isinstance(exc_info.value.__cause__, PermissionError)
+        assert data_file.read_text(encoding="utf-8") == before
 
 
 class TestMemoryStorage:

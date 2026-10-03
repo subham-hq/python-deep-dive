@@ -8,9 +8,16 @@ therefore has no idea whether it is talking to a file, memory, or a database,
 and tests can drive it with `MemoryStorage` instead of touching the disk.
 
 **The tracker owns transaction IDs.** An `Expense` may arrive with
-`txn_id=None`; `add` assigns the next free ID. Nothing else in the codebase
-writes `txn_id`, which means there is exactly one place to look when an ID
-looks wrong.
+`txn_id=None`; `add` assigns the next free ID, and `load` does the same for
+any stored record that has none. Nothing else in the codebase writes
+`txn_id`, which means there is exactly one place to look when an ID looks
+wrong.
+
+IDs are unique among stored records and are never handed out twice within
+one session. The data file stores only the records themselves, so after the
+highest-numbered expense is removed and saved, the next `load` starts from
+the highest *remaining* ID and that number can be issued again -- the same
+rule SQLite applies to rowids without AUTOINCREMENT.
 """
 
 from __future__ import annotations
@@ -155,6 +162,15 @@ class ExpenseTracker:
         # quadratic: 4,000 records took ~340 ms that way, versus ~15 ms here.
         ids = [e.txn_id for e in expenses if e.txn_id is not None]
         self._next_id = max(ids, default=0) + 1
+
+        # A record can be stored without an ID (JSONStorage.save accepts
+        # unassigned expenses). Left as None it would be unreachable by
+        # `get` and `remove`, so it gets the next free ID here, in file
+        # order, which makes the assignment the same on every load.
+        for expense in expenses:
+            if expense.txn_id is None:
+                expense.txn_id = self._next_id
+                self._next_id += 1
 
     def save(self) -> None:
         """Persist the current expenses.

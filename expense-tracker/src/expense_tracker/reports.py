@@ -16,9 +16,9 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Sequence
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
-from expense_tracker.expense import Expense
+from expense_tracker.expense import CENTS, Expense
 
 ZERO = Decimal("0.00")
 RUPEE = "\u20b9"
@@ -70,7 +70,10 @@ class SummaryReport(Report):
         total = total_of(expenses)
         count = len(expenses)
         # Decimal / int stays exact; no float ever enters the calculation.
-        average = (total / count).quantize(Decimal("0.01"))
+        # The rounding mode is explicit: quantize() otherwise falls back to
+        # the context's banker's rounding, so a mean of 0.025 would print as
+        # 0.02 while every stored amount rounds half up.
+        average = (total / count).quantize(CENTS, rounding=ROUND_HALF_UP)
         earliest = min(e.date for e in expenses)
         latest = max(e.date for e in expenses)
 
@@ -132,9 +135,10 @@ class MonthlyReport(Report):
         lines = [f"{'Month':<12}{'Count':>8}{'Total':>18}"]
         lines.append("-" * 48)
         for (year, month), amount in sorted(totals.items()):
+            # Padded to the same 12 columns as the header and TOTAL row.
+            label = f"{year}-{month:02d}"
             lines.append(
-                f"{year}-{month:02d}   {counts[(year, month)]:>8}"
-                f"{format_money(amount):>18}"
+                f"{label:<12}{counts[(year, month)]:>8}{format_money(amount):>18}"
             )
         lines.append("-" * 48)
         lines.append(

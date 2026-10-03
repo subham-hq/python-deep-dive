@@ -38,11 +38,15 @@ class InvalidAmountTypeError(ExpenseError):
 
 
 class InvalidAmountValueError(ExpenseError):
-    """Raised when an expense amount is not a positive value."""
+    """Raised when an expense amount is out of range: not positive, or too large."""
 
-    def __init__(self, amount: Decimal | int | str) -> None:
+    def __init__(
+        self,
+        amount: Decimal | int | str,
+        reason: str = "Amount must be greater than zero.",
+    ) -> None:
         self.amount = amount
-        super().__init__(f"Invalid amount: {amount}. Amount must be greater than zero.")
+        super().__init__(f"Invalid amount: {amount}. {reason}")
 
 
 class InvalidDateError(ExpenseError):

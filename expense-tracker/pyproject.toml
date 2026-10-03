@@ -4,7 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "expense-tracker"
-version = "1.0.0"
+# Single source of truth: read from expense_tracker.__version__ at build time.
+dynamic = ["version"]
 description = "A typed, tested command-line expense tracker built on the Python standard library."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -12,7 +13,7 @@ license = { text = "MIT" }
 authors = [{ name = "Subham" }]
 keywords = ["cli", "expenses", "finance", "budgeting"]
 classifiers = [
-  "Development Status :: 5 - Production/Stable",
+  "Development Status :: 4 - Beta",
   "Environment :: Console",
   "Intended Audience :: End Users/Desktop",
   "License :: OSI Approved :: MIT License",
@@ -36,8 +37,15 @@ dev = [
   "pre-commit>=3.8",
 ]
 
+[project.urls]
+Repository = "https://github.com/subham-hq/python-deep-dive"
+Source = "https://github.com/subham-hq/python-deep-dive/tree/main/expense-tracker"
+
 [project.scripts]
 expense-tracker = "expense_tracker.main:main"
+
+[tool.hatch.version]
+path = "src/expense_tracker/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/expense_tracker"]
@@ -51,7 +59,7 @@ warn_unreachable = true
 warn_unused_ignores = true
 show_error_codes = true
 # Fail if a decorator silently erases a function's type.
-disallow_any_decorated = false
+disallow_any_decorated = true
 pretty = true
 
 # ---------------------------------------------------------------- ruff ----

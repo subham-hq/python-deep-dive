@@ -9,6 +9,9 @@ catching `SystemExit`.
 from __future__ import annotations
 
 import json
+import os
+import runpy
+import subprocess
 import sys
 from pathlib import Path
 from unittest import mock
@@ -16,6 +19,7 @@ from unittest import mock
 import pytest
 
 from expense_tracker.cli import (
+    EXIT_BROKEN_PIPE,
     EXIT_ERROR,
     EXIT_INTERRUPTED,
     EXIT_OK,
@@ -105,6 +109,14 @@ class TestAdd:
             (["add", "Chai", "abc", "-c", "Food", "-d", "2026-01-05"], "amount"),
             (["add", "Chai", "20", "-c", "Food", "-d", "2026-13-45"], "2026-13-45"),
             (["add", "  ", "20", "-c", "Food", "-d", "2026-01-05"], "title"),
+            # Regression: used to escape as decimal.InvalidOperation.
+            (["add", "Big", "1e30", "-c", "Food", "-d", "2026-01-05"], "less than"),
+            # Regression: rounded up to the limit, was saved, and then made
+            # every later command fail to load the file.
+            (
+                ["add", "Big", "999999999999999.995", "-c", "X", "-d", "2026-01-01"],
+                "less than",
+            ),
         ],
     )
     def test_invalid_input_exits_one_with_a_readable_message(
@@ -123,6 +135,29 @@ class TestAdd:
     def test_invalid_input_does_not_create_a_file(self, data_file: Path) -> None:
         run(data_file, "add", "Chai", "-5", "-c", "Food", "-d", "2026-01-05")
         assert not data_file.exists()
+
+    def test_largest_allowed_amount_keeps_the_file_usable(
+        self, data_file: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        add = ["add", "Big", "999999999999999.994", "-c", "X", "-d", "2026-01-01"]
+        assert run(data_file, *add) == EXIT_OK
+        assert run(data_file, "list") == EXIT_OK
+        assert "999,999,999,999,999.99" in capsys.readouterr().out
+        assert run(data_file, "remove", "1") == EXIT_OK
+
+    def test_unwritable_data_path_exits_one_with_a_readable_message(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Regression: a failure creating the directory or temp file used to
+        escape as a raw OSError and print a traceback.
+        """
+        blocker = tmp_path / "not-a-directory"
+        blocker.write_text("", encoding="utf-8")
+        add_chai = ["add", "Chai", "20", "-c", "Food", "-d", "2026-01-05"]
+        assert run(blocker / "expenses.json", *add_chai) == EXIT_ERROR
+        err = capsys.readouterr().err
+        assert "Could not save" in err
+        assert "Traceback" not in err
 
 
 class TestList:
@@ -264,6 +299,19 @@ class TestCorruptDataHandling:
         assert run(data_file, "list") == EXIT_ERROR
         err = capsys.readouterr().err
         assert "2026-13-45" in err
+        # ...and which record it is, so the file can be fixed by hand.
+        assert "position 0" in err
+        assert "Traceback" not in err
+
+    def test_non_integer_id_exits_one(
+        self, data_file: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Regression: a string txn_id crashed `max()` with a TypeError."""
+        record = make_expense().to_dict() | {"txn_id": "abc"}
+        data_file.write_text(json.dumps([record]), encoding="utf-8")
+        assert run(data_file, "list") == EXIT_ERROR
+        err = capsys.readouterr().err
+        assert "txn_id" in err
         assert "Traceback" not in err
 
     def test_malformed_json_exits_one(
@@ -272,6 +320,22 @@ class TestCorruptDataHandling:
         data_file.write_text("{{{ not json", encoding="utf-8")
         assert run(data_file, "list") == EXIT_ERROR
         assert "Traceback" not in capsys.readouterr().err
+
+
+class TestRecordsWithoutIds:
+    def test_can_be_shown_and_removed(
+        self, data_file: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Regression: a record stored with a null ID listed as `--` and no
+        command could address it.
+        """
+        data_file.write_text(json.dumps([make_expense().to_dict()]), encoding="utf-8")
+
+        assert run(data_file, "show", "1") == EXIT_OK
+        assert "Chai" in capsys.readouterr().out
+
+        assert run(data_file, "remove", "1") == EXIT_OK
+        assert json.loads(data_file.read_text(encoding="utf-8")) == []
 
 
 class TestFullWorkflow:
@@ -326,3 +390,67 @@ class TestEntryPoint:
         ):
             entry_point()
         assert exc_info.value.code == EXIT_OK
+
+    def test_python_dash_m_runs_the_same_entry_point(
+        self, seeded: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        with (
+            mock.patch.object(
+                sys, "argv", ["expense_tracker", "--data", str(seeded), "total"]
+            ),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            runpy.run_module("expense_tracker", run_name="__main__")
+        assert exc_info.value.code == EXIT_OK
+        assert "3,000.75" in capsys.readouterr().out
+
+
+class TestBrokenPipe:
+    """Regression: `expense-tracker list | head` printed a BrokenPipeError
+    traceback once `head` stopped reading.
+    """
+
+    def test_exits_141_and_silences_stdout(self) -> None:
+        def reader_went_away() -> int:
+            raise BrokenPipeError
+
+        fake_stdout = mock.Mock()
+        fake_stdout.fileno.return_value = 1
+        with (
+            mock.patch("expense_tracker.main.cli_main", reader_went_away),
+            mock.patch.object(sys, "stdout", fake_stdout),
+            mock.patch("os.open", return_value=99) as os_open,
+            mock.patch("os.dup2") as dup2,
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            entry_point()
+
+        assert exc_info.value.code == EXIT_BROKEN_PIPE
+        # stdout now points at devnull, so the interpreter's final flush
+        # cannot raise a second time.
+        assert os_open.call_args.args[0] == os.devnull
+        dup2.assert_called_once_with(99, 1)
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX pipe semantics")
+    def test_closing_the_pipe_early_is_not_a_crash(self, data_file: Path) -> None:
+        """End to end, in a real process with a real pipe."""
+        # Far more output than a pipe buffers, so the writer is still going
+        # when the reader hangs up.
+        records = [
+            make_expense(f"Item {i}").to_dict() | {"txn_id": i} for i in range(1, 3001)
+        ]
+        data_file.write_text(json.dumps(records), encoding="utf-8")
+
+        command = [sys.executable, "-m", "expense_tracker", "--data", str(data_file)]
+        with subprocess.Popen(
+            [*command, "list"], stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        ) as proc:
+            assert proc.stdout is not None
+            assert proc.stderr is not None
+            assert proc.stdout.readline()
+            proc.stdout.close()
+            err = proc.stderr.read().decode()
+            proc.wait(timeout=60)
+
+        assert "Traceback" not in err
+        assert proc.returncode == EXIT_BROKEN_PIPE

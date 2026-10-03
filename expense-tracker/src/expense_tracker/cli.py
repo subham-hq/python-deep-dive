@@ -14,6 +14,7 @@ Code  Meaning
 1     A domain error (bad input, missing record, unreadable file)
 2     Wrong command-line usage (argparse's own exit code)
 130   Interrupted with Ctrl-C
+141   Output pipe closed early, e.g. ``expense-tracker list | head``
 ===== ==========================================================
 """
 
@@ -34,7 +35,10 @@ DEFAULT_DATA_PATH = Path.home() / ".expense-tracker" / "expenses.json"
 
 EXIT_OK = 0
 EXIT_ERROR = 1
+# 128 + signal number, the shell's convention for "killed by a signal":
+# SIGINT is 2, SIGPIPE is 13.
 EXIT_INTERRUPTED = 130
+EXIT_BROKEN_PIPE = 141
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -257,8 +261,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     except ExpenseError as e:
         # Every expected failure in this package inherits from ExpenseError,
         # and each one carries a message written for a human. Printing that
-        # message beats printing a traceback.
+        # message beats printing a traceback. Notes added along the way
+        # (such as which stored record was bad) are part of that message.
         print(f"Error: {e}", file=sys.stderr)
+        for note in getattr(e, "__notes__", ()):
+            print(f"  {note}", file=sys.stderr)
         return EXIT_ERROR
     except ValueError as e:
         # Raised by argument parsing helpers such as _parse_month.

@@ -41,7 +41,10 @@ class TestAdd:
     def test_ids_do_not_repeat_after_a_removal(
         self, empty_tracker: ExpenseTracker
     ) -> None:
-        """Reusing a deleted ID would make old references silently wrong."""
+        """Within a session, reusing a deleted ID would make old references
+        silently wrong. (Across a save and reload, see the module docstring of
+        `expense_tracker.tracker`.)
+        """
         for _ in range(3):
             empty_tracker.add(make_expense())
         empty_tracker.remove(2)
@@ -183,6 +186,32 @@ class TestPersistence:
         """The file's highest ID is 7, so the next assigned ID must be 8."""
         tracker = ExpenseTracker(JSONStorage(populated_file))
         tracker.load()
+        assert tracker.add(make_expense()).txn_id == 8
+
+    def test_load_assigns_ids_to_records_stored_without_one(
+        self, data_file: Path
+    ) -> None:
+        """Regression: a record stored with `"txn_id": null` stayed None after
+        loading, so `show` and `remove` could never reach it.
+        """
+        records = [
+            make_expense("Chai").to_dict(),
+            make_expense("Rent").to_dict() | {"txn_id": 5},
+            make_expense("Tea").to_dict(),
+        ]
+        data_file.write_text(json.dumps(records), encoding="utf-8")
+
+        tracker = ExpenseTracker(JSONStorage(data_file))
+        tracker.load()
+
+        # Stored IDs are kept; missing ones continue after the highest, in
+        # file order, so every load assigns the same numbers.
+        assert [(e.title, e.txn_id) for e in tracker] == [
+            ("Chai", 6),
+            ("Rent", 5),
+            ("Tea", 7),
+        ]
+        assert tracker.get(6).title == "Chai"
         assert tracker.add(make_expense()).txn_id == 8
 
     def test_load_from_empty_file_starts_ids_at_one(self, data_file: Path) -> None:

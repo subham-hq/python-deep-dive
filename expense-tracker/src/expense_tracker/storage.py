@@ -21,7 +21,12 @@ import tempfile
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
-from expense_tracker.exceptions import CorruptRecordError, LoadError, SaveError
+from expense_tracker.exceptions import (
+    CorruptRecordError,
+    ExpenseError,
+    LoadError,
+    SaveError,
+)
 from expense_tracker.expense import Expense, ExpenseRecord
 
 #: Every key an `ExpenseRecord` must contain to be considered well-formed.
@@ -63,8 +68,17 @@ def _validate_record(raw: Any, index: int) -> ExpenseRecord:
             index, f"missing field(s): {', '.join(sorted(missing))}"
         )
 
+    # The other fields are checked by Expense's setters, but nothing checks
+    # txn_id -- and a string here would only blow up later, inside max().
+    # bool is excluded because it is an int subclass: `true` is not ID 1.
+    txn_id = raw["txn_id"]
+    if txn_id is not None and (isinstance(txn_id, bool) or not isinstance(txn_id, int)):
+        raise CorruptRecordError(
+            index, f"txn_id must be an integer or null, got {txn_id!r}"
+        )
+
     return {
-        "txn_id": raw["txn_id"],
+        "txn_id": txn_id,
         "date": raw["date"],
         "title": raw["title"],
         "category": raw["category"],
@@ -88,8 +102,10 @@ class JSONStorage:
         an error.
 
         Raises:
-            LoadError: if the file cannot be read or is not valid JSON.
-            CorruptRecordError: if a record has the wrong shape.
+            LoadError: if the file cannot be read, is not UTF-8, or is not
+                valid JSON.
+            CorruptRecordError: if a record has the wrong shape, or reuses a
+                transaction ID already taken by an earlier record.
             InvalidAmountValueError, InvalidDateError, ...: if a record's
                 values fail validation. These propagate unwrapped, so the
                 caller learns what is actually wrong with the data.
@@ -102,6 +118,8 @@ class JSONStorage:
                 raw_data = json.load(file)
         except OSError as e:
             raise LoadError(self.path, str(e)) from e
+        except UnicodeDecodeError as e:
+            raise LoadError(self.path, "file is not UTF-8 text") from e
         except json.JSONDecodeError as e:
             raise LoadError(self.path, f"invalid JSON at line {e.lineno}") from e
 
@@ -110,15 +128,35 @@ class JSONStorage:
                 self.path, f"expected a list of records, got {type(raw_data).__name__}"
             )
 
-        # Note what is *not* wrapped here: Expense.from_dict raises
-        # InvalidDateError, InvalidAmountValueError and friends, and those are
-        # allowed straight through. Catching them and re-raising a generic
-        # LoadError would tell the user "could not load the file" when the
-        # real answer is "record 47 has the date 2026-13-45".
-        return [
-            Expense.from_dict(_validate_record(raw, i))
-            for i, raw in enumerate(raw_data)
-        ]
+        expenses: list[Expense] = []
+        position_of_id: dict[int, int] = {}
+        for index, raw in enumerate(raw_data):
+            record = _validate_record(raw, index)
+
+            # Note what is *not* wrapped here: Expense.from_dict raises
+            # InvalidDateError, InvalidAmountValueError and friends, and those
+            # are allowed straight through. Catching them and re-raising a
+            # generic LoadError would tell the user "could not load the file"
+            # when the real answer is "record 47 has the date 2026-13-45".
+            # A note adds the "record 47" part without changing the type.
+            try:
+                expense = Expense.from_dict(record)
+            except ExpenseError as e:
+                e.add_note(f"in the record at position {index} of {self.path}")
+                raise
+
+            txn_id = expense.txn_id
+            if txn_id is not None:
+                if txn_id in position_of_id:
+                    raise CorruptRecordError(
+                        index,
+                        f"txn_id {txn_id} is already used by the record "
+                        f"at position {position_of_id[txn_id]}",
+                    )
+                position_of_id[txn_id] = index
+            expenses.append(expense)
+
+        return expenses
 
     def save(self, expenses: list[Expense]) -> None:
         """Write `expenses` to disk atomically.
@@ -126,15 +164,20 @@ class JSONStorage:
         Raises:
             SaveError: if the data cannot be serialised or written.
         """
-        self.path.parent.mkdir(parents=True, exist_ok=True)
         data = [expense.to_dict() for expense in expenses]
 
-        # The temporary file must live in the same directory as the target:
-        # os.replace is only atomic within a single filesystem, and /tmp is
-        # often mounted separately.
-        tmp_fd, tmp_name = tempfile.mkstemp(
-            dir=self.path.parent, prefix=f".{self.path.name}.", suffix=".tmp"
-        )
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            # The temporary file must live in the same directory as the
+            # target: os.replace is only atomic within a single filesystem,
+            # and /tmp is often mounted separately.
+            tmp_fd, tmp_name = tempfile.mkstemp(
+                dir=self.path.parent, prefix=f".{self.path.name}.", suffix=".tmp"
+            )
+        except OSError as e:
+            # A parent that is a file, a read-only directory, ... -- nothing
+            # has been written yet, so there is nothing to clean up.
+            raise SaveError(self.path, str(e)) from e
         tmp_path = Path(tmp_name)
 
         try:
