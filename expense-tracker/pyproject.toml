@@ -33,7 +33,7 @@ dev = [
   "mypy>=1.11",
   "pytest>=8.3",
   "pytest-cov>=5.0",
-  "ruff>=0.6",
+  "ruff>=0.15,<0.17",  # pinned: `ruff format --check` output changes between minor releases
   "pre-commit>=3.8",
 ]
 
