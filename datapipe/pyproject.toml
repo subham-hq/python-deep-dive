@@ -1,15 +1,98 @@
-[project]
-name = "datapipe"
-version = "0.1.0"
-requires-python = ">=3.12"
-dependencies = []
-
-[project.scripts]
-datapipe = "datapipe.cli:main"      # makes `datapipe records.json` a real command
-
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[project]
+name = "datapipe"
+version = "0.1.0"
+description = "A tiny typed data pipeline: Protocol and ABC steps over a lazy stream of records."
+readme = "README.md"
+# PEP 695 generics (`class Pipeline[T]`) need 3.12.
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "Subham" }]
+classifiers = [
+  "Environment :: Console",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Typing :: Typed",
+]
+# Standard library only.
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+  "mypy>=1.11",
+  "pytest>=8.3",
+  "pytest-cov>=5.0",
+  "ruff>=0.6",
+]
+
+[project.scripts]
+# Makes `datapipe records.json` a real command.
+datapipe = "datapipe.cli:main"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/datapipe"]
+
+# ---------------------------------------------------------------- mypy ----
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src", "tests"]
+warn_unreachable = true
+show_error_codes = true
+pretty = true
+
+# ---------------------------------------------------------------- ruff ----
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+  "E", "W",   # pycodestyle
+  "F",        # pyflakes
+  "I",        # isort
+  "N",        # pep8-naming
+  "UP",       # pyupgrade
+  "B",        # bugbear
+  "A",        # builtin shadowing
+  "C4",       # comprehensions
+  "SIM",      # simplifications
+  "PTH",      # prefer pathlib
+  "RET",      # return statements
+  "ARG",      # unused arguments
+  "PT",       # pytest style
+  "RUF",      # ruff-specific
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["datapipe"]
+
+# -------------------------------------------------------------- pytest ----
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = [
+  "-q",
+  "--strict-markers",
+  "--strict-config",
+  "--cov=datapipe",
+  "--cov-report=term-missing",
+  "--cov-fail-under=100",
+]
+
+# ------------------------------------------------------------ coverage ----
+[tool.coverage.run]
+branch = true
+source = ["datapipe"]
+
+[tool.coverage.report]
+exclude_lines = [
+  "pragma: no cover",
+  "\\.\\.\\.$",
+  "if __name__ == .__main__.:",
+]

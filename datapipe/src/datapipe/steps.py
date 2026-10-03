@@ -11,13 +11,16 @@ class ValidatingStep(ABC):
         self.validate(item)
         return item
 
+
 class RequirePositiveValue(ValidatingStep):
     def validate(self, item: Record) -> None:
-        if item["value"] < 0:
-            raise ValueError(f"negative value in record {item['id']}")
+        if item["value"] <= 0:
+            raise ValueError(
+                f"record {item['id']} has a non-positive value: {item['value']}"
+            )
 
-class RequiredName(ValidatingStep):
+
+class RequireName(ValidatingStep):
     def validate(self, item: Record) -> None:
         if not item["name"].strip():
             raise ValueError(f"record {item['id']} has an empty name")
-
