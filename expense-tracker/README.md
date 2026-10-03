@@ -238,6 +238,11 @@ mypy                      # strict type check of src/ and tests/
 pytest                    # test suite and coverage report; fails below 90%
 ```
 
+CI runs the same four commands on Python 3.11, 3.12 and 3.13. Running
+`pre-commit install` once, anywhere in the repository, adds git hooks for ruff
+and basic file hygiene from the repository-wide
+[`.pre-commit-config.yaml`](../.pre-commit-config.yaml).
+
 ## License
 
 MIT. See [LICENSE](../LICENSE) at the repository root.

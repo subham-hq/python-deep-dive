@@ -1,17 +1,34 @@
 name: Update README
 
+# Rebuilds the Projects table in the root README from each project's own
+# README.md. The bot commit is tagged [skip ci] so it does not re-run CI.
+
 on:
   push:
     branches: [main]
+    paths:
+      - "**/README.md"
+      - "scripts/update_readme.py"
+      - ".github/workflows/update-readme.yml"
+  workflow_dispatch:
 
 permissions:
   contents: write
+
+# Never run two index updates at once; both would try to push to main.
+concurrency:
+  group: update-readme
+  cancel-in-progress: false
 
 jobs:
   update-readme:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The branch tip, not the triggering commit, so the push below is a
+          # fast-forward even if main moved while this run was queued.
+          ref: ${{ github.ref }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"

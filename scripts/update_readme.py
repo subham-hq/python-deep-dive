@@ -8,7 +8,9 @@ markers is left untouched — that prose is yours.
 Each project's title and one-line blurb are pulled from that project's OWN
 README.md (its first '# ' heading and its first real line of text), so the
 description lives with the project and you control it. Add a folder + a README,
-push, and this index updates itself.
+push, and this index updates itself. Folders without a README.md are skipped.
+HTML comments (such as TODO notes) and fenced code blocks are ignored when
+picking the title and blurb.
 """
 
 from __future__ import annotations
@@ -20,13 +22,27 @@ from urllib.parse import quote
 ROOT = Path(__file__).resolve().parent.parent
 README = ROOT / "README.md"
 START, END = "<!-- PROJECTS:START -->", "<!-- PROJECTS:END -->"
-IGNORE = {".git", ".github", "scripts", ".venv", "__pycache__", ".mypy_cache", ".pytest_cache"}
+IGNORE = {
+    ".git",
+    ".github",
+    "scripts",
+    ".venv",
+    "__pycache__",
+    ".mypy_cache",
+    ".pytest_cache",
+}
+HTML_COMMENT = re.compile(r"<!--.*?-->", flags=re.DOTALL)
+CODE_FENCE = re.compile(r"^\s*```.*?^\s*```[^\n]*$", flags=re.DOTALL | re.MULTILINE)
 
 
 def project_dirs() -> list[Path]:
     return sorted(
-        p for p in ROOT.iterdir()
-        if p.is_dir() and not p.name.startswith(".") and p.name not in IGNORE
+        p
+        for p in ROOT.iterdir()
+        if p.is_dir()
+        and not p.name.startswith(".")
+        and p.name not in IGNORE
+        and (p / "README.md").is_file()
     )
 
 
@@ -35,7 +51,10 @@ def title_and_blurb(folder: Path) -> tuple[str, str]:
     title, blurb = folder.name, ""
     readme = folder / "README.md"
     if readme.exists():
-        text = readme.read_text(encoding="utf-8")
+        # Strip comments and code blocks first, so a line inside one can never
+        # become the title or the blurb.
+        text = HTML_COMMENT.sub("", readme.read_text(encoding="utf-8"))
+        text = CODE_FENCE.sub("", text)
         if m := re.search(r"^#\s+(.+)$", text, flags=re.MULTILINE):
             title = m.group(1).strip()
         for line in text.splitlines():
@@ -44,7 +63,8 @@ def title_and_blurb(folder: Path) -> tuple[str, str]:
                 continue
             blurb = s
             break
-    return title, blurb
+    # A literal "|" would end the table cell early.
+    return title.replace("|", "\\|"), blurb.replace("|", "\\|")
 
 
 def build_table() -> str:
@@ -52,7 +72,9 @@ def build_table() -> str:
     for folder in project_dirs():
         title, blurb = title_and_blurb(folder)
         link = f"[{title}](./{quote(folder.name)})"
-        rows.append(f"| {link} | {blurb or '_add a README to this folder_'} |")
+        rows.append(
+            f"| {link} | {blurb or '_add a one-line description to its README_'} |"
+        )
     return "\n".join(rows)
 
 

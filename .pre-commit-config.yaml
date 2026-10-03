@@ -1,0 +1,30 @@
+# Git hooks for the whole repository. pre-commit always runs from the repository
+# root; ruff picks up each project's own settings from the nearest pyproject.toml.
+# Type checking (mypy) and tests need each project's own environment, so they run
+# in CI (.github/workflows/ci.yml) rather than here.
+#
+# Install once, from the repository root:
+#   python -m pip install pre-commit
+#   pre-commit install
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.10
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+        types_or: [python, pyi]
+        # log-file-analyzer keeps hand-aligned end-of-line comments, so it is
+        # linted but not auto-formatted (CI does not run ruff format there either).
+        exclude: ^log-file-analyzer/

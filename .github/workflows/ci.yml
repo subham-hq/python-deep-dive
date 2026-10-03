@@ -1,0 +1,154 @@
+name: CI
+
+# Each project in this monorepo is self-contained, so each gets its own job that
+# runs from inside the project folder with that project's own tool settings.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # Superseded pull request runs are cancelled; every push to main is checked.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  log-file-analyzer:
+    name: log-file-analyzer (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    defaults:
+      run:
+        working-directory: log-file-analyzer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            log-file-analyzer/pyproject.toml
+            log-file-analyzer/requirements-dev.txt
+      - name: Install dev tools
+        run: python -m pip install -r requirements-dev.txt
+      - name: Test (pytest)
+        run: python -m pytest
+      - name: Lint (ruff)
+        run: ruff check .
+      - name: Type check (mypy --strict)
+        run: mypy
+
+  datapipe:
+    name: datapipe (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # PEP 695 generics: the project requires Python 3.12+.
+        python-version: ["3.12", "3.13"]
+    defaults:
+      run:
+        working-directory: datapipe
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: datapipe/pyproject.toml
+      - name: Install
+        run: python -m pip install -e ".[dev]"
+      - name: Lint (ruff)
+        run: ruff check .
+      - name: Format (ruff format)
+        run: ruff format --check .
+      - name: Type check (mypy --strict)
+        run: mypy
+      - name: Test (pytest, 100% coverage)
+        run: pytest
+
+  expense-tracker:
+    name: expense-tracker (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    defaults:
+      run:
+        working-directory: expense-tracker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: expense-tracker/pyproject.toml
+      - name: Install
+        run: python -m pip install -e ".[dev]"
+      - name: Lint (ruff)
+        run: ruff check .
+      - name: Format (ruff format)
+        run: ruff format --check .
+      - name: Type check (mypy --strict)
+        run: mypy
+      - name: Test (pytest, coverage >= 90%)
+        run: pytest
+
+  practice:
+    name: practice (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    defaults:
+      run:
+        working-directory: practice
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            practice/pyproject.toml
+            practice/requirements.txt
+            practice/requirements-dev.txt
+      - name: Install
+        run: python -m pip install -r requirements-dev.txt
+      - name: Lint (ruff)
+        run: ruff check .
+      - name: Format (ruff format)
+        run: ruff format --check .
+      - name: Type check (mypy --strict)
+        run: mypy
+      - name: Test (pytest)
+        run: pytest
+
+  scripts:
+    name: scripts (README index generator)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dev tools
+        run: python -m pip install "ruff>=0.15,<0.17" "mypy>=1.11"
+      - name: Lint (ruff)
+        run: ruff check scripts
+      - name: Format (ruff format)
+        run: ruff format --check scripts
+      - name: Type check (mypy --strict)
+        run: mypy --strict scripts
+      - name: Smoke test
+        run: python scripts/update_readme.py
