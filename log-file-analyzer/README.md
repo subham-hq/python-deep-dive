@@ -97,8 +97,8 @@ This project is one folder of the [python-deep-dive](https://github.com/subham-h
 git clone https://github.com/subham-hq/python-deep-dive.git
 cd python-deep-dive/log-file-analyzer
 
-python make_logs.py    # writes app.log — 100,000 lines, ~4.3 MB
-python analyzer.py     # runs both passes
+python3 make_logs.py    # writes app.log — 100,000 lines, ~4.3 MB
+python3 analyzer.py     # runs both passes
 ```
 
 Both scripts write and read `app.log` in the current directory, so run them from this folder.
@@ -106,7 +106,7 @@ Both scripts write and read `app.log` in the current directory, so run them from
 The decorators are independently runnable and print their own demos:
 
 ```bash
-python decorators.py
+python3 decorators.py
 ```
 
 The `@retry` demo fails at random on purpose: each attempt fails 70% of the time, so about one run in three uses up all three attempts and ends with the re-raised `ValueError` traceback.
