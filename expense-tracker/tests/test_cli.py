@@ -76,7 +76,7 @@ class TestAdd:
         self, data_file: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         run(data_file, "add", "Chai", "20.00", "-c", "Food", "-d", "2026-01-05")
-        assert "#1" in capsys.readouterr().out
+        assert capsys.readouterr().out == "Added #1: Chai (₹20.00)\n"
 
     def test_continues_ids_from_existing_data(self, seeded: Path) -> None:
         run(seeded, "add", "Books", "300", "-c", "Education", "-d", "2026-03-01")

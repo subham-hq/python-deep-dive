@@ -152,8 +152,8 @@ expense-tracker --data /tmp/demo.json report category
 ```
 
 ```text
-Added #1: 1 | 2026-01-05 | Chai | Food | ₹20.00
-Added #2: 2 | 2026-02-01 | Rent | Housing | ₹12,000.00
+Added #1: Chai (₹20.00)
+Added #2: Rent (₹12,000.00)
 Spending by Category
 ================================================
 Category          Count           Total    Share
@@ -223,9 +223,9 @@ work is actually in the repo.
 - [x] Typing: `mypy --strict` runs in CI on every project that has code
   (`notifier` is still an empty placeholder)
 - [x] `asyncio` ([practice/async-lab](practice/async-lab))
-- [ ] **Capstone (Week 4):** _name and link it here once it ships_
 
-<!-- TODO(you): keep this list honest — it's the first thing a reviewer cross-checks
+<!-- TODO(you): add the capstone project here (name + link) once it ships.
+     Keep this list honest — it's the first thing a reviewer cross-checks
      against the actual folders. -->
 
 ## License

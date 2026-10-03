@@ -22,13 +22,13 @@ A typed, tested command-line expense tracker built on the Python standard librar
 
 ```console
 $ expense-tracker add "Chai" 20 -c Food -d 2026-01-05
-Added #1: 1 | 2026-01-05 | Chai | Food | ₹20.00
+Added #1: Chai (₹20.00)
 $ expense-tracker add "Diesel" 2500.50 -c Fuel -d 2026-01-20 -m "tank refill"
-Added #2: 2 | 2026-01-20 | Diesel | Fuel | ₹2,500.50
+Added #2: Diesel (₹2,500.50)
 $ expense-tracker add "Rent" 12000 -c Housing -d 2026-02-01
-Added #3: 3 | 2026-02-01 | Rent | Housing | ₹12,000.00
+Added #3: Rent (₹12,000.00)
 $ expense-tracker add "Lunch" 480.25 -c Food -d 2026-02-11
-Added #4: 4 | 2026-02-11 | Lunch | Food | ₹480.25
+Added #4: Lunch (₹480.25)
 
 $ expense-tracker list
 1 | 2026-01-05 | Chai | Food | ₹20.00

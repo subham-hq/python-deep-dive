@@ -152,7 +152,7 @@ def cmd_add(args: argparse.Namespace) -> int:
         )
     )
     tracker.save()
-    print(f"Added #{expense.txn_id}: {expense}")
+    print(f"Added #{expense.txn_id}: {expense.title} ({format_money(expense.amount)})")
     return EXIT_OK
 
 
