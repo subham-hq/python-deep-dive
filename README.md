@@ -29,7 +29,6 @@
 | [datapipe](./datapipe) | A tiny, fully typed data pipeline that validates, normalizes and scales JSON records through composable steps, using only the standard library. |
 | [Expense Tracker](./expense-tracker) | A typed, tested command-line expense tracker built on the Python standard library, with exact decimal money and atomic saves. |
 | [Log File Analyzer](./log-file-analyzer) | A memory-constant log analysis pipeline built on Python generators. |
-| [notifier](./notifier) | Work in progress: this project is not implemented yet, and the package is currently an empty placeholder. |
 | [Practice: asyncio, concurrency and OOP drills](./practice) | Small, runnable Python exercises on asyncio, threads vs. processes and the GIL, and OOP building blocks, plus a benchmark that makes 200 HTTP requests sequentially, with threads, and with asyncio. |
 
 <!-- PROJECTS:END -->
@@ -178,7 +177,6 @@ python-deep-dive/
 ├── datapipe/                  # installable package (src/ layout), `datapipe` command
 ├── expense-tracker/           # installable package (src/ layout), `expense-tracker` command
 ├── log-file-analyzer/         # standalone scripts, no install needed
-├── notifier/                  # placeholder, not implemented yet
 ├── practice/
 │   ├── async-lab/             # asyncio, threads vs. processes, fetch benchmark
 │   └── oop/                   # iterator protocol and decorators in small classes
@@ -220,8 +218,7 @@ work is actually in the repo.
 
 - [x] Decorators, iterators, generators, context managers
   ([log-file-analyzer](log-file-analyzer), [practice/oop](practice/oop))
-- [x] Typing: `mypy --strict` runs in CI on every project that has code
-  (`notifier` is still an empty placeholder)
+- [x] Typing: `mypy --strict` runs in CI on every project
 - [x] `asyncio` ([practice/async-lab](practice/async-lab))
 
 <!-- TODO(you): add the capstone project here (name + link) once it ships.
